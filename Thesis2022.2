@@ -1,0 +1,918 @@
+#Thesis opportunity 2
+library(tidyverse)
+library(haven)
+library(patchwork)
+#old dataset
+DIS <- read_sav("~/Downloads/DIS1plusDIS2plusDonaties_Data_voorthesis.sav")
+View(DIS)
+
+#Delete unnecessary columns
+DIS <- DIS %>%
+  select(-(2:4), -(8:9), -(18:20), -22, -(25:43), -(46:47), -49, -52, -55, -(58:61), -64,
+         -(65:67), -69, -(79:121), -(124:135), -(139:144), -(146:153), -(155:270),
+         -(285:288), -(328:329), -334, -336, -338, -340, -342, -344, -346, -348,
+         -350, -352, -354, -356, -358, -360, -362, -364, -366, -368, -370, -372,
+         -374, -376, -378, -380, -382, -384, -386, -388, -390, -392, -394, -396,
+         -398, -400, -402, -404, -406, -408, -410, -412, -414, -416, -418, -420,
+         -422, -424, -426, -(431:432), -(437:439), -443, -447, -451, -455, -459,
+         -463, -467, -471, -(475:476), -482, -488, -494, -500, -506, -512, -518,
+         -524, -(530:531), -535, -539, -543, -547, -551, -555, -559, -563, -(567:568),
+         - 574, -580, -586, -592, -598, -604, -610, -616, -(622:623), -(625:626),
+         -(628:629), -631, -633, -(635:637), -(639:640), -(642:644), -(646:647),
+         -(649:651), -(653:654), -(656:658), -(660:661), -(663:665), -(667:668),
+         -(670:672), -(674:675), -(677:679), -(681:682), -(684:686), -(688:691),
+         -693, -695, -(697:698), -(700:701), -(703:704), -(706:707), -(709:710),
+         -(712:713), -(715:716), -(718:720), -722, -(724:725), -727, -(729:730),
+         -(732:733), -(735:736), -(738:739), -(741:742), -(744:745), -(747:749),
+         -750, -752, -(754:755), -(757:758), -(760:761), -(763:764), -(766:767),
+         -(769:770), -(772:773), -(775:776), -778, -782, -784, -786, -788, -790,
+         -792, -794, -(796:923), -(925:928), -(930:933), -(940:943), -945, -947,
+         -(949:950), -(952:953), -(955:956), -(958:959), -(961:962), -(964:965),
+         -(967:968), -(970:972), -974, -976, -(978:979), -(981:982), -(984:985),
+         -(987:988), -(990:991), -(993:994), -(996:997), -(999:1001), -1005, -1007,
+         -1009, -1011, -1013, -1015, -1017, -(1019:1020), -1022, -1024, -(1026:1027),
+         -(1029:1030), -(1032:1033), -(1035:1036), -(1038:1039), -(1041:1042),
+         -(1044:1045), -(1047:1049), -(1051:1052), -(1054:1059), -1066, -1070,
+         -(1076:1078), -(1083:1085), -(1090:1091), -(1093:1097))
+
+#delete the rows of participants who did not participate in both studies
+DIS <- DIS %>%
+  filter(D1_responder==1, D2_responder==1)
+DIS <- DIS %>%
+  select(-6, -10)
+
+#delete donors that are not blood donor, but plasma donor or other
+#also keep the DIS data 
+DIS <- DIS %>%
+  filter(TypeofDonation == 1 | TypeofDonation == 0)
+
+#Delete rows with reason for deferral
+#First transform the NA values to 0, because if transfusion is not applicable,
+#they did not have a transfusion
+DIS <- DIS %>%
+  mutate(DIS1_63_1 = replace(DIS1_63_1,is.na(DIS1_63_1),0))
+DIS <- DIS%>%
+  mutate(DIS2_v56_1 = replace(DIS2_v56_1, is.na(DIS2_v56_1),0))
+
+DIS <- DIS %>%
+  filter(DIS2_v56_1==0, DIS1_63_1==0)
+
+#Transform the dates to year so we can calculate with it
+DIS$DIS1_Datum_Deelname <- sub("^(\\d{4}).*$", "\\1", DIS$DIS1_Datum_Deelname)
+DIS$DIS2_Datum_Deelname <- sub("^(\\d{4}).*$", "\\1", DIS$DIS2_Datum_Deelname)
+DIS$Donatiedatum <- sub("^(\\d{4}).*$", "\\1", DIS$Donatiedatum)
+
+#Set to numeric such that we can compare
+DIS$DIS1_Datum_Deelname <- as.numeric(DIS$DIS1_Datum_Deelname)
+DIS$DIS2_Datum_Deelname <- as.numeric(DIS$DIS2_Datum_Deelname)
+DIS$Donatiedatum <- as.numeric(DIS$Donatiedatum)
+
+DIS <- DIS%>%
+  group_by(KeyID)%>%
+  fill(DIS1_Datum_Deelname, .direction="up")
+DIS <- DIS %>%
+  group_by(KeyID) %>%
+  fill(DIS2_Datum_Deelname, .direction="up")
+
+#Lapse donor: at least one donation but not in 24 months
+#Active donor: at least one donation 24months after DIS
+DIS$diffDISorDonate <- as.numeric(DIS$Donatiedatum - DIS$DIS1_Datum_Deelname)
+DIS$diffDIS2orDonate <- as.numeric(DIS$Donatiedatum - DIS$DIS2_Datum_Deelname)
+DIS$activeorlapse1 <- as.numeric(DIS$diffDISorDonate <=2 & DIS$diffDISorDonate >= 0)
+DIS$activeorlapse2 <- as.numeric(DIS$diffDIS2orDonate <=2 & DIS$diffDIS2orDonate >=0)
+
+DIS <- DIS %>% 
+  group_by(KeyID) %>% 
+  mutate(activeorlapse1 = replace_na(activeorlapse1, max(activeorlapse1, na.rm = TRUE)))
+
+DIS <- DIS %>%
+  group_by(KeyID) %>%
+  mutate(activeorlapse2 = replace_na(activeorlapse2, max(activeorlapse2, na.rm=TRUE)))
+
+#plaats kolommen naar voren
+DIS <- DIS %>%
+  select(activeorlapse1, activeorlapse2, diffDISorDonate, diffDIS2orDonate, everything())
+
+DIS <- DIS %>%
+  select(-(31:40))
+
+#Whether a person is religious or not
+DIS <- DIS %>%
+  mutate(DIS2_v15 = replace(DIS2_v15,is.na(DIS2_v15),DIS1_22_1))
+DIS <- DIS %>%
+  mutate(DIS2_v15 = replace(DIS2_v15,is.na(DIS2_v15),8))
+DIS <- DIS %>%
+  mutate(DIS1_22_1 = replace(DIS1_22_1,is.na(DIS1_22_1),8))
+DIS$religious <- as.numeric(DIS$DIS1_22_1 != 8 & DIS$DIS2_v15 !=8)
+DIS$diffreligion <- as.numeric(DIS$DIS1_22_1 != DIS$DIS2_v15)
+DIS <- DIS %>%
+  select(-(416:418))
+
+#Difference burgerlijke staat DIS1 and DIS2
+DIS$differencemaritalstatus <- as.numeric(DIS$DIS2_v06 != DIS$DIS1_v08)
+DIS <- DIS %>%
+  select(-(20:22))
+
+#Filter with rows with only donation data
+DIS <- DIS %>%
+  filter(TypeofDonation == 0)
+
+#Because of the NA values in activeorlapse, some became -Inf
+#Delete the rows with -Inf
+DIS <- DIS %>%
+  filter(activeorlapse1 != -Inf)
+DIS <- DIS %>%
+  filter(activeorlapse2 != -Inf)
+
+#Delete more useless columns
+DIS <- DIS %>%
+  select(-11, -14)
+DIS <- DIS %>%
+  select(-(3:4), -(6:8))
+
+#Delete rows with people who have or had cancer
+#If you have or had cancer, you are deferred from giving blood
+DIS <- DIS %>%
+  mutate(DIS1_66_a_1 = replace(DIS1_66_a_1,is.na(DIS1_66_a_1),0))
+DIS <- DIS%>%
+  mutate(DIS2_v59_a_1 = replace(DIS2_v59_a_1, is.na(DIS2_v59_a_1),0))
+DIS <- DIS %>%
+  filter(DIS2_v59_a_1==0, DIS1_66_a_1==0)
+DIS <- DIS %>%
+  select(-(77:81))
+
+#Parents passed away 
+DIS[, 126:127][is.na(DIS[, 126:127])] <- 2
+DIS[, 130:131][is.na(DIS[,130:131])] <- 2
+DIS$fatherpassed <- as.numeric(DIS$DIS1_67_1_3 != DIS$DIS2_v60_1_3)
+DIS$motherpassed <- as.numeric(DIS$DIS1_67_2_3 != DIS$DIS2_v60_2_3)
+DIS <- DIS %>%
+  select(-(124:131))
+
+#start or stopped to see a doctor
+DIS[, 34:35][is.na(DIS[,34:35])] <- 0
+DIS$startseeingdoctor <- as.numeric(DIS$DIS1_61==0 & DIS$DIS2_v54==1)
+DIS$stopseeingdoctor <- as.numeric(DIS$DIS1_61== 1 & DIS$DIS2_v54 == 0)
+DIS <- DIS %>%
+  select(-(34:35))
+
+#start or stopped to see a specialist
+DIS[, 34:35][is.na(DIS[,34:35])] <- 0
+DIS$startseeingspecialist <- as.numeric(DIS$DIS1_62 == 0 &  DIS$DIS2_v55 == 1)
+DIS$stopseeingspecialist <- as.numeric(DIS$DIS1_62 == 1 & DIS$DIS2_v55 == 0)
+
+DIS <- DIS %>%
+  select(-(34:35))
+
+#filter people with weight below 50kg
+DIS <- DIS %>%
+  filter(DIS1_v05>=50, DIS2_v05>=50)
+DIS <- DIS %>%
+  select(-(11:12))
+
+#change in household
+DIS$differencehousehold <- as.numeric(DIS$DIS1_v09_1 != DIS$DIS2_v07)
+DIS <- DIS %>%
+  select(-(11:12))
+
+#change in volunteering
+DIS$startvolunteering <- as.numeric(DIS$DIS1_19 == 0 & DIS$DIS2_v10 == 1)
+DIS$stopvolunteering <- as.numeric(DIS$DIS1_19 == 1 & DIS$DIS2_v10 == 0)
+DIS <- DIS %>%
+  select(-(11:16))
+
+#donation valued by acquaintances
+DIS$valuedmorebyacquaint <- as.numeric(DIS$DIS2_v27_h > DIS$DIS1_36_i)
+DIS$valuedlessbyacquaint <- as.numeric(DIS$DIS2_v27_h < DIS$DIS1_36_i)
+DIS <- DIS %>%
+  select(-(11:15))
+
+#Delete columns of the birthdays/years of brothers/sisters/children
+DIS <- DIS %>%
+  select(-106, -109, -112, -115, -118, -121, -124, -127, -130, -(133:135),
+         -(138:140), -(143:145), -(148:150), -(153:155), -(158:160), -(163:165),
+         -(168:170), -(173:175), -178, -181, -184, -187, -190, -193, -196, -199, -202,
+         -(205:207), -(210:212), -(215:217), -(220:222), -(225:227), -(230:232),
+         -(235:237), -(240:242), -(245:247))
+
+#Subjective health related questions:
+#decrease or increase easy to get sick (compared to others)
+DIS$healthdecrease1 <- as.numeric(DIS$DIS2_v53_a > DIS$DIS1_60_a)
+DIS$healthincrease1 <- as.numeric(DIS$DIS2_v53_a < DIS$DIS1_60_a)
+#just as healthy as other people
+DIS$healthdecrease2 <- as.numeric(DIS$DIS2_v53_b < DIS$DIS1_60_b)
+DIS$healthincrease2 <- as.numeric(DIS$DIS2_v53_b > DIS$DIS1_60_b)
+#expect health to decrease
+DIS$healthdecrease3 <- as.numeric(DIS$DIS2_v53_c > DIS$DIS1_60_c)
+DIS$healthincrease3 <- as.numeric(DIS$DIS2_v53_c < DIS$DIS1_60_c)
+#excellent health
+DIS$healthdecrease4 <- as.numeric(DIS$DIS2_v53_d < DIS$DIS1_60_d)
+DIS$healthincrease4 <- as.numeric(DIS$DIS2_v53_d > DIS$DIS1_60_d)
+
+DIS <- DIS %>%
+  select(-(11:20))
+
+#Delete more unnecessary columns
+DIS <- DIS %>%
+  select(-(229:234), -(277:282), -(284:288),-291, -(293:296))
+
+#Fill the NA people who don't have siblings and children with 0
+DIS[, 95:166][is.na(DIS[, 95:166])] <- 0
+#childbirth
+DIS$childbirth1 <- as.numeric(DIS$DIS1_69_1_1 == 0 & DIS$DIS2_v62_1_1 >0)
+DIS$childbirth2 <- as.numeric(DIS$DIS1_69_2_1 == 0 & DIS$DIS2_v62_2_1 >0)
+DIS$childbirth3 <- as.numeric(DIS$DIS1_69_3_1 == 0 & DIS$DIS2_v62_3_1 >0)
+DIS$childbirth4 <- as.numeric(DIS$DIS1_69_4_1 == 0 & DIS$DIS2_v62_4_1 >0)
+DIS$childbirth5 <- as.numeric(DIS$DIS1_69_5_1 == 0 & DIS$DIS2_v62_5_1 >0)
+DIS$childbirth6 <- as.numeric(DIS$DIS1_69_6_1 == 0 & DIS$DIS2_v62_6_1 >0)
+DIS$childbirth7 <- as.numeric(DIS$DIS1_69_7_1 == 0 & DIS$DIS2_v62_7_1 >0)
+DIS$childbirth8 <- as.numeric(DIS$DIS1_69_8_1 == 0 & DIS$DIS2_v62_8_1 >0)
+DIS$childbirth9 <- as.numeric(DIS$DIS1_69_9_1 == 0 & DIS$DIS2_v62_9_1 >0)
+DIS$childbirth <- as.numeric(DIS$childbirth1 == 1 | DIS$childbirth2 == 1 |
+                               DIS$childbirth3 == 1 | DIS$childbirth4 == 1 |
+                               DIS$childbirth5 == 1 | DIS$childbirth6 == 1 |
+                               DIS$childbirth7 == 1 | DIS$childbirth8 == 1 | 
+                               DIS$childbirth9 == 1)
+
+DIS <- DIS %>%
+  select(-(297:305))
+#child passing away
+DIS$childpas1 <- as.numeric(DIS$DIS1_69_1_3 == 2 & DIS$DIS2_v62_1_3 == 1)
+DIS$childpas2 <- as.numeric(DIS$DIS1_69_2_3 == 2 & DIS$DIS2_v62_2_3 == 1)
+DIS$childpas3 <- as.numeric(DIS$DIS1_69_3_3 == 2 & DIS$DIS2_v62_3_3 == 1)
+DIS$childpas4 <- as.numeric(DIS$DIS1_69_4_3 == 2 & DIS$DIS2_v62_4_3 == 1)
+DIS$childpas5 <- as.numeric(DIS$DIS1_69_5_3 == 2 & DIS$DIS2_v62_5_3 == 1)
+DIS$childpas6 <- as.numeric(DIS$DIS1_69_6_3 == 2 & DIS$DIS2_v62_6_3 == 1)
+DIS$childpas7 <- as.numeric(DIS$DIS1_69_7_3 == 2 & DIS$DIS2_v62_7_3 == 1)
+DIS$childpas8 <- as.numeric(DIS$DIS1_69_8_3 == 2 & DIS$DIS2_v62_8_3 == 1)
+DIS$childpas9 <- as.numeric(DIS$DIS1_69_9_3 == 2 & DIS$DIS2_v62_9_3 == 1)
+DIS$childpassing <- as.numeric(DIS$childpas1 == 1 | DIS$childpas2 == 1 |
+                                 DIS$childpas3 == 1 | DIS$childpas4 == 1 |
+                                 DIS$childpas5 == 1 | DIS$childpas6 == 1 |
+                                 DIS$childpas7 == 1 | DIS$childpas8 == 1 | 
+                                 DIS$childpas9 == 1)
+DIS <- DIS %>%
+  select(-(113:130), -(149:166), -(298:306))
+
+#medicine use
+#fill NA with 0, people do not use medication
+DIS[, 11:47][is.na(DIS[,11:47])] <- 0
+#delete column 45-47, because that was only DIS1
+DIS <- DIS %>%
+  select(-(45:47))
+
+DIS$medicineDIS1 <- as.numeric(DIS$DIS1_65_a == 1 | DIS$DIS1_65_b == 1 |
+                                 DIS$DIS1_65_c == 1 | DIS$DIS1_65_d == 1 |
+                                 DIS$DIS1_65_e == 1 | DIS$DIS1_65_f == 1 |
+                                 DIS$DIS1_65_g == 1 | DIS$DIS1_65_h == 1 |
+                                 DIS$DIS1_65_i == 1 | DIS$DIS1_65_j == 1 |
+                                 DIS$DIS1_65_k == 1 | DIS$DIS1_65_l == 1 |
+                                 DIS$DIS1_65_m == 1 | DIS$DIS1_65_n == 1 |
+                                 DIS$DIS1_65_r == 1 | DIS$DIS1_65_s == 1 |
+                                 DIS$DIS1_65_t == 1)
+DIS$medicineDIS2 <- as.numeric(DIS$DIS2_v58_a == 1 | DIS$DIS2_v58_b == 1 |
+                                 DIS$DIS2_v58_c == 1 | DIS$DIS2_v58_d == 1 |
+                                 DIS$DIS2_v58_e == 1 | DIS$DIS2_v58_f == 1 |
+                                 DIS$DIS2_v58_g == 1 | DIS$DIS2_v58_h == 1 |
+                                 DIS$DIS2_v58_i == 1 | DIS$DIS2_v58_j == 1 |
+                                 DIS$DIS2_v58_k == 1 | DIS$DIS2_v58_l == 1 |
+                                 DIS$DIS2_v58_m == 1 | DIS$DIS2_v58_n == 1 |
+                                 DIS$DIS2_v58_o == 1 | DIS$DIS2_v58_p == 1 |
+                                 DIS$DIS2_v58_q == 1)
+DIS$startmedicineuse <- as.numeric(DIS$medicineDIS2 ==1 &  DIS$medicineDIS1 == 0)
+DIS$stopmedicineuse <- as.numeric(DIS$medicineDIS2 == 0 & DIS$medicineDIS1 == 1)
+
+DIS <- DIS %>%
+  select(-(11:44), -(260:261))
+
+#sickness such as heart attacks
+#fill NA with 0, people do not have such sickness
+DIS[, 11:57][is.na(DIS[,11:57])] <- 0
+#delete allergies, because only DIS1 and anemie
+DIS <- DIS %>%
+  select(-(54:57))
+DIS$disease1 <- as.numeric(DIS$DIS1_66_b_1 == 1 | DIS$DIS1_66_c_1 == 1 |
+                             DIS$DIS1_66_d_1 == 1 | DIS$DIS1_66_e_1 == 1 |
+                             DIS$DIS1_66_f_1 == 1 | DIS$DIS1_66_g_1 == 1 |
+                             DIS$DIS1_66_h_1 == 1 | DIS$DIS1_66_i_1 == 1 |
+                             DIS$DIS1_66_j_1 == 1 | DIS$DIS1_66_k_1 == 1 |
+                             DIS$DIS1_66_l_1 == 1 | DIS$DIS1_66_m_1 == 1 |
+                             DIS$DIS1_66_n_1 == 1 | DIS$DIS1_66_o_1 == 1 |
+                             DIS$DIS1_66_p_1 == 1 | DIS$DIS1_66_q_1 == 1 |
+                             DIS$DIS1_66_r_1 == 1 | DIS$DIS1_66_s_1 == 1 |
+                             DIS$DIS1_66_t_1 == 1 | DIS$DIS1_66_u_1 == 1 |
+                             DIS$DIS1_66_DIS1__1 == 1)
+DIS$disease2 <- as.numeric(DIS$DIS2_v59_b_1 == 1 | DIS$DIS2_v59_c_1 == 1 |
+                             DIS$DIS2_v59_d_1 == 1 | DIS$DIS2_v59_e_1 == 1 |
+                             DIS$DIS2_v59_f_1 == 1 | DIS$DIS2_v59_w_1 == 1 |
+                             DIS$DIS2_v59_h_1 == 1 | DIS$DIS2_v59_i_1 == 1 |
+                             DIS$DIS2_v59_j_1 == 1 | DIS$DIS2_v59_k_1 == 1 |
+                             DIS$DIS2_v59_l_1 == 1 | DIS$DIS2_v59_m_1 == 1 |
+                             DIS$DIS2_v59_n_1 == 1 | DIS$DIS2_v59_o_1 == 1 |
+                             DIS$DIS2_v59_p_1 == 1 | DIS$DIS2_v59_q_1 == 1 |
+                             DIS$DIS2_v59_r_1 == 1 | DIS$DIS2_v59_s_1 == 1 |
+                             DIS$DIS2_v59_t_1 == 1 | DIS$DIS2_v59_u_1 == 1 |
+                             DIS$DIS2_v59_x_1 == 1)
+DIS$gotsick <- as.numeric(DIS$disease2 == 1 & DIS$disease1 == 0)
+DIS$recovered <- as.numeric(DIS$disease2 == 0 & DIS$disease1 == 1)
+
+DIS <- DIS %>%
+  select(-(11:53), -(224:225))
+
+#brother or sister passed 
+DIS$siblingpas1 <- as.numeric(DIS$DIS1_68_1_3 == 2 & DIS$DIS2_v61_1_3 == 1)
+DIS$siblingpas2 <- as.numeric(DIS$DIS1_68_2_3 == 2 & DIS$DIS2_v61_2_3 == 1)
+DIS$siblingpas3 <- as.numeric(DIS$DIS1_68_3_3 == 2 & DIS$DIS2_v61_3_3 == 1)
+DIS$siblingpas4 <- as.numeric(DIS$DIS1_68_4_3 == 2 & DIS$DIS2_v61_4_3 == 1)
+DIS$siblingpas5 <- as.numeric(DIS$DIS1_68_5_3 == 2 & DIS$DIS2_v61_5_3 == 1)
+DIS$siblingpas6 <- as.numeric(DIS$DIS1_68_6_3 == 2 & DIS$DIS2_v61_6_3 == 1)
+DIS$siblingpas7 <- as.numeric(DIS$DIS1_68_7_3 == 2 & DIS$DIS2_v61_7_3 == 1)
+DIS$siblingpas8 <- as.numeric(DIS$DIS1_68_8_3 == 2 & DIS$DIS2_v61_8_3 == 1)
+DIS$siblingpas9 <- as.numeric(DIS$DIS1_68_9_3 == 2 & DIS$DIS2_v61_9_3 == 1)
+DIS$siblingpassing <- as.numeric(DIS$siblingpas1 == 1 | DIS$siblingpas2 == 1 |
+                                   DIS$siblingpas3 == 1 | DIS$siblingpas4 == 1 |
+                                   DIS$siblingpas5 == 1 | DIS$siblingpas6 == 1 |
+                                   DIS$siblingpas7 == 1 | DIS$siblingpas8 == 1 |
+                                   DIS$siblingpas9 == 1)
+
+
+DIS <- DIS %>%
+  select(-(11:46), -(183:191))
+
+#family member donors
+#DIS2_v67_1_3: (1 = nu donor, 2 = in het verleden donor)
+DIS[, 51:60][is.na(DIS[,51:60])] <- 0
+DIS[, 103:112][is.na(DIS[,103:112])] <- 0
+
+DIS$familydonor1 <- as.numeric(DIS$DIS1_73_1_3 == 1 | DIS$DIS1_73_2_3 == 1 |
+                                 DIS$DIS1_73_3_3 == 1 | DIS$DIS1_73_4_3 == 1 |
+                                 DIS$DIS1_73_5_3 == 1 | DIS$DIS1_73_6_3 == 1 |
+                                 DIS$DIS1_73_7_3 == 1 | DIS$DIS1_73_8_3 == 1 |
+                                 DIS$DIS1_73_9_3 == 1 | DIS$DIS1_73_10_3 == 1)
+DIS$familydonor2 <- as.numeric(DIS$DIS2_v67_1_1 == 1 | DIS$DIS2_v67_2_1 == 1 |
+                                 DIS$DIS2_v67_3_1 == 1 | DIS$DIS2_v67_4_1 == 1 |
+                                 DIS$DIS2_v67_5_1 == 1 | DIS$DIS2_v67_6_1 == 1 |
+                                 DIS$DIS2_v67_7_1 == 1 | DIS$DIS2_v67_8_1 == 1 |
+                                 DIS$DIS2_v67_9_1 == 1 | DIS$DIS2_v67_10_1 == 1)
+
+DIS$familystopdonating <- as.numeric(DIS$familydonor2 == 0 & DIS$familydonor1 == 1)
+DIS$familystartdonating <- as.numeric(DIS$familydonor2 == 1 & DIS$familydonor1 == 0)
+
+DIS <- DIS %>%
+  select(-(51:60), -(103:112), -(148:149))
+
+#Family member disease
+#Fill NA with 0, family does not have a disease
+#we seperate between the diseases and blood tranfusion
+DIS[, 11:60][is.na(DIS[,11:60])] <- 0
+DIS[, 63:92][is.na(DIS[,63:92])] <- 0
+DIS$familydisease1 <- as.numeric(DIS$DIS1_70_1_1 != 0 | DIS$DIS1_70_2_1 != 0 |
+                                   DIS$DIS1_70_3_1 != 0 | DIS$DIS1_70_4_1 != 0 |
+                                   DIS$DIS1_70_5_1 != 0 | DIS$DIS1_70_6_1 != 0 |
+                                   DIS$DIS1_70_7_1 != 0 | DIS$DIS1_70_8_1 != 0 |
+                                   DIS$DIS1_70_9_1 != 0 | DIS$DIS1_70_10_1 != 0 |
+                                   DIS$DIS1_71_1_1 != 0 | DIS$DIS1_71_2_1 != 0 |
+                                   DIS$DIS1_71_3_1 != 0 | DIS$DIS1_71_4_1 != 0 |
+                                   DIS$DIS1_71_5_1 != 0 | DIS$DIS1_71_6_1 != 0 |
+                                   DIS$DIS1_71_7_1 != 0 | DIS$DIS1_71_8_1 != 0 |
+                                   DIS$DIS1_71_9_1 != 0 | DIS$DIS1_71_10_1 != 0 |
+                                   DIS$DIS1_72_1_1 != 0 | DIS$DIS1_72_2_1 != 0 |
+                                   DIS$DIS1_72_3_1 != 0 | DIS$DIS1_72_4_1 != 0 |
+                                   DIS$DIS1_72_5_1 != 0 | DIS$DIS1_72_6_1 != 0 |
+                                   DIS$DIS1_72_7_1 != 0 | DIS$DIS1_72_8_1 != 0 |
+                                   DIS$DIS1_72_9_1 != 0 | DIS$DIS1_72_10_1 != 0)
+
+DIS$familydisease2 <- as.numeric(DIS$DIS2_v63_1_1 != 0 | DIS$DIS2_v63_2_1 != 0 |
+                                   DIS$DIS2_v63_3_1 != 0 | DIS$DIS2_v63_4_1 != 0 |
+                                   DIS$DIS2_v63_5_1 != 0 | DIS$DIS2_v63_6_1 != 0 |
+                                   DIS$DIS2_v63_7_1 != 0 | DIS$DIS2_v63_8_1 != 0 |
+                                   DIS$DIS2_v63_8_1 != 0 | DIS$DIS2_v63_9_1 != 0 |
+                                   DIS$DIS2_v63_10_1 != 0 | DIS$DIS2_v64_1_1 != 0 |
+                                   DIS$DIS2_v64_2_1 != 0 | DIS$DIS2_v64_3_1 != 0 |
+                                   DIS$DIS2_v64_4_1 != 0 | DIS$DIS2_v64_5_1 != 0 |
+                                   DIS$DIS2_v64_6_1 != 0 | DIS$DIS2_v64_7_1 != 0 |
+                                   DIS$DIS2_v64_8_1 != 0 | DIS$DIS2_v64_9_1 != 0 |
+                                   DIS$DIS2_v64_10_1 != 0 | DIS$DIS2_v65_1_1 != 0 |
+                                   DIS$DIS2_v65_2_1 != 0 | DIS$DIS2_v65_3_1 != 0 |
+                                   DIS$DIS2_v65_4_1 != 0 | DIS$DIS2_v65_5_1 != 0 |
+                                   DIS$DIS2_v65_6_1 != 0 | DIS$DIS2_v65_7_1 != 0 |
+                                   DIS$DIS2_v65_8_1 != 0 | DIS$DIS2_v65_9_1 != 0 |
+                                   DIS$DIS2_v65_10_1 != 0)
+
+DIS$familytranfusion1 <- as.numeric(DIS$DIS1_74_1_1 != 0 | DIS$DIS1_74_2_1 != 0 |
+                                      DIS$DIS1_74_3_1 != 0 | DIS$DIS1_74_4_1 != 0 |
+                                      DIS$DIS1_74_4_1 != 0 | DIS$DIS1_74_5_1 != 0 |
+                                      DIS$DIS1_74_6_1 != 0 | DIS$DIS1_74_7_1 != 0 |
+                                      DIS$DIS1_74_8_1 != 0 | DIS$DIS1_74_9_1 != 0 |
+                                      DIS$DIS1_74_10_1 != 0)
+DIS$familytransfusion2 <- as.numeric(DIS$DIS2_v66_1_1 != 0 | DIS$DIS2_v66_2_1 != 0 |
+                                       DIS$DIS2_v66_3_1 != 0 | DIS$DIS2_v66_4_1 != 0 |
+                                       DIS$DIS2_v66_5_1 != 0 | DIS$DIS2_v66_6_1 != 0 |
+                                       DIS$DIS2_v66_7_1 != 0 | DIS$DIS2_v66_8_1 != 0 |
+                                       DIS$DIS2_v66_9_1 != 0 | DIS$DIS2_v66_10_1 != 0)
+
+DIS$familymembergotsick <- as.numeric(DIS$familydisease2 > DIS$familydisease1)
+DIS$familymemberstarttransf <- as.numeric(DIS$familytranfusion1 == 0 & DIS$familytransfusion2 == 1)
+DIS$familymemberrecovered <- as.numeric(DIS$familydisease2 < DIS$familydisease1)
+DIS$familymemberreceivedtransf <- as.numeric(DIS$familytranfusion1 == 1 & DIS$familytransfusion2 == 0)
+
+DIS <- DIS %>%
+  select(-(11:60), -(63:92), -(130:133))
+
+#The gender is the same for both DIS2 and DIS1, so we will delete gender from DIS2
+DIS <- DIS %>%
+  select(-18)
+
+#work situation
+DIS$DIS2_v11 <- substr(DIS$DIS2_v11, 1, 1)
+DIS$DIS1_13 <- substr(DIS$DIS1_13, 1,1)
+DIS$startworking <- as.numeric(DIS$DIS2_v11 == 1 & DIS$DIS1_13 != 1)
+DIS$stopworking <- as.numeric(DIS$DIS2_v11 != 1 & DIS$DIS1_13 == 1)
+DIS <- DIS %>%
+  select(-(16:17))
+
+#people around them donating blood
+DIS$DIS1_99 <- replace(DIS$DIS1_99 ,DIS$DIS1_99 == 4 , 0)
+DIS$DIS1_99 <- replace(DIS$DIS1_99, DIS$DIS1_99 != 0, 1)
+DIS$DIS2_v92 <- replace(DIS$DIS2_v92, DIS$DIS2_v92 == 4, 0)
+DIS$DIS2_v92 <- replace(DIS$DIS2_v92, DIS$DIS2_v92 != 0, 1)
+
+DIS$acqstoppeddonating <- as.numeric(DIS$DIS2_v92 < DIS$DIS1_99)
+DIS$acqstartdonating <- as.numeric(DIS$DIS1_99 == 0 & DIS$DIS2_v92 == 1)
+
+DIS <- DIS %>%
+  select(-12, -14)
+
+#satisfaction about communication
+DIS$moresatisfiedcommunication <- as.numeric(DIS$DIS2_v89 == 1 & DIS$DIS1_95 != 1)
+DIS$lesssatisfiedcommunication <- as.numeric(DIS$DIS2_v89 != 1 & DIS$DIS1_95 == 1)
+
+DIS <- DIS %>%
+  select(-5,-7, -(11:12))
+
+#Plaats kolom KeyID naar voren
+DIS <- DIS %>%
+  select(KeyID, everything())
+
+#combine mother/father/sibling/child passing away into 1 
+DIS$familypassingaway <- as.numeric(DIS$motherpassed == 1 | DIS$fatherpassed == 1 |
+                                  DIS$siblingpassing == 1 | DIS$childpassing == 1)
+
+DIS <- DIS %>%
+  select(-(13:14), -33, -38)
+
+DIS <- DIS %>% 
+  rename(
+    Ethnicbackground = DIS1_v11_1,
+    Age1 = Age_DIS1,
+    Age2 = Age_DIS2
+  )
+
+#health decrease or increase, or no change
+DIS$overallhealthdecrease <- as.numeric(DIS$healthdecrease1 == 1 | DIS$healthdecrease2 == 1 |
+                                   DIS$healthdecrease3 == 1 | DIS$healthdecrease4 == 1)
+DIS$overallhealthincrease <- as.numeric(DIS$healthincrease1 == 1 | DIS$healthincrease2 == 1 |
+                                        DIS$healthincrease3 == 1 |DIS$healthincrease4 == 1)
+
+DIS <- DIS %>%
+  select(-(22:29))
+
+#we will only use the active or lapse after DIS 2
+DIS <- DIS %>%
+  select(-2)
+DIS <- DIS %>% 
+  rename(
+    activeorlapse = activeorlapse2
+  )
+
+#Delete ethnic background 
+DIS <- DIS %>%
+  select(-8)
+#Delete other useless columns
+DIS <- DIS %>%
+  select(-(3:4), -6)
+
+#Nieuwe dataset opslaan
+write_sav(DIS,"DIS.sav")
+
+#data exploration
+DIS$activeorlapse <- as.factor(DIS$activeorlapse)
+#Barplot for imbalance
+levels(DIS$activeorlapse) <- c("lapse","active")
+p1 <- ggplot(data = DIS, aes(x = activeorlapse)) +
+  geom_bar(fill="steelblue") +
+  ggtitle("Class distribution lapse or active") +
+  xlab("Lapse or active") + ylab("count")
+
+table(DIS$activeorlapse)
+prop.table(table(DIS$activeorlapse))
+
+#Age and genders
+DIS$Gender <- as.factor(DIS$Gender)
+levels(DIS$Gender) <- c("Male","Female")
+p2 <- ggplot(DIS)+
+  geom_boxplot(aes(x=Gender, y=Age2, fill = "steelblue"))+
+  ggtitle("Age distribution per gender")+
+  xlab("Gender") + ylab("Age") +
+  theme(legend.position = "")
+
+t.test(Age2 ~ Gender, data = DIS)  
+DIS %>% 
+  group_by(Gender) %>% 
+  summarise(mean(Age2))
+
+DIS %>% 
+  group_by(Gender) %>% 
+  summarise(sd(Age2))
+
+DIS %>% 
+  group_by(Gender) %>% 
+  summarise(min(Age2))
+
+DIS %>% 
+  group_by(Gender) %>% 
+  summarise(max(Age2))
+
+#Gender distribution
+
+table(DIS$Gender)
+prop.table(table(DIS$Gender))
+
+#Gender active/laps
+p3 <- ggplot(DIS)+
+  geom_bar(aes(x=activeorlapse, group=Gender, fill = "steelblue"))+
+  facet_wrap(~Gender) +
+  ggtitle("Lapse or active distribution per gender")+
+  xlab("Lapse or active") + ylab("Age") +
+  theme(legend.position = "")
+
+DIS %>% 
+  group_by(activeorlapse) %>% 
+  summarise(table(Gender))
+
+DIS %>% 
+  group_by(activeorlapse) %>% 
+  summarise(prop.table(table(Gender)))
+
+#show the plots
+p2
+p1/p3
+
+#religion
+table(DIS$religion)
+prop.table(table(DIS$religious))
+
+#error analysis split the dataset based on gender
+
+DISmale <- DIS[which(DIS$Gender == 1),]
+DISfemale <- DIS[which(DIS$Gender == 2),]
+
+#Random forest algorithm
+library(caret)
+library(ROSE)
+library(randomForest)
+
+#Make dataset for prediction
+DISprediction <- DIS %>%
+  select(-1, -4, -6)
+
+DISprediction$Gender <- replace(DISprediction$Gender ,DISprediction$Gender == 2 , 0)
+DISprediction[is.na(DISprediction)] <- 0
+col_names <- c(1:33)
+DISprediction[,col_names] <- lapply(DISprediction[,col_names] , factor)
+
+#check levels of the variables
+sapply(lapply(DISprediction, unique), length)
+
+#data split
+set.seed(123)
+trainrf <- sample(seq(1, 3), size = nrow(DISprediction), replace = TRUE, prob = c(.6, .2, .2))
+TrainSetrf <- DISprediction[trainrf == 1,]
+TestSetrf <- DISprediction[trainrf == 2,]
+ValidSetrf <- DISprediction[trainrf == 3,]
+
+#over sampling
+set.seed(123)
+overrf2 <- ovun.sample(activeorlapse~., data=TrainSetrf, method = "over")$data
+overrf <- ovun.sample(activeorlapse~., data=ValidSetrf, method = "over")$data
+
+#Make a baseline model
+x <- overrf2[,2:33]
+y <- overrf2[1]
+control <- trainControl(method="repeatedcv", number=10, repeats=3)
+metric <- "Accuracy"
+set.seed(123)
+mtry <- sqrt(ncol(x))
+tunegrid <- expand.grid(.mtry=mtry)
+rf_default <- train(activeorlapse ~ ., data=overrf2, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control)
+
+confusionMatrix(predict(rf_default, TestSetrf), TestSetrf$activeorlapse, mode = "everything")
+confusionMatrix(predict(rf_default, TrainSetrf), TrainSetrf$activeorlapse, mode = "everything")
+#customRF code
+customRF <- list(type = "Classification", library = "randomForest", loop = NULL)
+customRF$parameters <- data.frame(parameter = c("mtry", "ntree"), class = rep("numeric", 2), label = c("mtry", "ntree"))
+customRF$grid <- function(x, y, len = NULL, search = "grid") {}
+customRF$fit <- function(x, y, wts, param, lev, last, weights, classProbs, ...) {
+  randomForest(x, y, mtry = param$mtry, ntree=param$ntree, ...)
+}
+customRF$predict <- function(modelFit, newdata, preProc = NULL, submodels = NULL)
+  predict(modelFit, newdata)
+customRF$prob <- function(modelFit, newdata, preProc = NULL, submodels = NULL)
+  predict(modelFit, newdata, type = "prob")
+customRF$sort <- function(x) x[order(x[,1]),]
+customRF$levels <- function(x) x$classes
+
+# find the best hyperparameters with the validation data
+control <- trainControl(method="repeatedcv", number=10, repeats=3)
+tunegrid <- expand.grid(.mtry=c(1:10), .ntree=c(500,1000,1500))
+set.seed(123)
+custom <- train(activeorlapse~., data=overrf, method=customRF, metric=metric, tuneGrid=tunegrid, trControl=control)
+summary(custom)
+plot(custom)
+
+#The final values used for the model were mtry = 10 and ntree = 1500.
+
+#train optimal model on the training set
+tuneGrid2 <- expand.grid(.mtry = 10)
+control <- trainControl(method="repeatedcv", number=10, repeats=3)
+set.seed(123)
+fitrfmodel <- train(activeorlapse~.,
+                overrf2,
+                method = "rf",
+                metric = "Accuracy",
+                tuneGrid = tuneGrid2,
+                trControl = control,
+                importance = TRUE,
+                ntree = 1500)
+
+summary(fitrfmodel)
+
+set.seed(123)
+confusionMatrix(predict(fitrfmodel, TestSetrf), TestSetrf$activeorlapse, mode = "everything")
+confusionMatrix(predict(fitrfmodel, TrainSetrf), TrainSetrf$activeorlapse, mode = "everything")
+
+#feature importance
+importantrf <- varImp(fitrfmodel)
+
+# plot dataframe
+ggplot(importantrf, aes(x = reorder(feature, MeanDecreaseGini), 
+                        y = MeanDecreaseGini)) +
+  geom_bar(stat='identity', fill = 'steelblue') +
+  coord_flip() +
+  theme_classic() +
+  labs(
+    x     = "Feature name",
+    y     = "Importance (%)",
+    title = "Feature Importance: Random Forest model")
+
+#error analysis on gender
+#Male dataset
+DISmale <- DISmale %>%
+  select(-1, -(3:4), -6)
+
+DISmale[is.na(DISmale)] <- 0
+col_names <- c(1:32)
+DISmale[,col_names] <- lapply(DISmale[,col_names] , factor)
+
+#check levels of the variables
+sapply(lapply(DISmale, unique), length)
+
+#data split
+set.seed(123)
+malerf <- sample(seq(1, 3), size = nrow(DISmale), replace = TRUE, prob = c(.6, .2, .2))
+TrainSetmalerf <- DISmale[malerf == 1,]
+TestSetmalerf <- DISmale[malerf == 2,]
+ValidSetmalerf <- DISmale[malerf == 3,]
+
+#over sampling
+set.seed(123)
+overmalerf <- ovun.sample(activeorlapse~., data=TrainSetmalerf, method = "over")$data
+
+#run the model
+tuneGrid2 <- expand.grid(.mtry = 10)
+control <- trainControl(method="repeatedcv", number=10, repeats=3)
+set.seed(123)
+fitrfmalemodel <- train(activeorlapse~.,
+                    overmalerf,
+                    method = "rf",
+                    metric = "Accuracy",
+                    tuneGrid = tuneGrid2,
+                    trControl = control,
+                    importance = TRUE,
+                    ntree = 1500)
+
+summary(fitrfmalemodel)
+
+set.seed(123)
+confusionMatrix(predict(fitrfmalemodel, TestSetmalerf), TestSetmalerf$activeorlapse, mode = "everything")
+confusionMatrix(predict(fitrfmalemodel, TrainSetmalerf), TrainSetmalerf$activeorlapse, mode = "everything")
+
+#feature importance
+importantmalerf <- varImp(fitrfmalemodel)
+
+# plot dataframe
+ggplot(importantmalerf, aes(x = reorder(feature, MeanDecreaseGini), 
+                        y = MeanDecreaseGini)) +
+  geom_bar(stat='identity', fill = 'steelblue') +
+  coord_flip() +
+  theme_classic() +
+  labs(
+    x     = "Feature name",
+    y     = "Importance (%)",
+    title = "Feature Importance: Random Forest male")
+
+#Female dataset
+DISfemale <- DISfemale %>%
+  select(-1, -(3:4), -6)
+
+DISfemale[is.na(DISfemale)] <- 0
+col_names <- c(1:32)
+DISfemale[,col_names] <- lapply(DISfemale[,col_names] , factor)
+
+#check levels of the variables
+sapply(lapply(DISfemale, unique), length)
+
+#data split
+set.seed(123)
+femalerf <- sample(seq(1, 3), size = nrow(DISfemale), replace = TRUE, prob = c(.6, .2, .2))
+TrainSetfemalerf <- DISfemale[femalerf == 1,]
+TestSetfemalerf <- DISfemale[femalerf == 2,]
+ValidSetfemalerf <- DISfemale[femalerf == 3,]
+
+#over sampling
+set.seed(123)
+overfemalerf <- ovun.sample(activeorlapse~., data=TrainSetfemalerf, method = "over")$data
+
+#run the model
+tuneGrid2 <- expand.grid(.mtry = 10)
+control <- trainControl(method="repeatedcv", number=10, repeats=3)
+set.seed(123)
+fitrffemalemodel <- train(activeorlapse~.,
+                        overfemalerf,
+                        method = "rf",
+                        metric = "Accuracy",
+                        tuneGrid = tuneGrid2,
+                        trControl = control,
+                        importance = TRUE,
+                        ntree = 1500)
+
+summary(fitrffemalemodel)
+
+set.seed(123)
+confusionMatrix(predict(fitrffemalemodel, TestSetfemalerf), TestSetfemalerf$activeorlapse, mode = "everything")
+confusionMatrix(predict(fitrffemalemodel, TrainSetfemalerf), TrainSetfemalerf$activeorlapse, mode = "everything")
+
+#feature importance
+importantfemalerf <- varImp(fitrffemalemodel)
+
+# plot dataframe
+ggplot(importantfemalerf, aes(x = reorder(feature, MeanDecreaseGini), 
+                            y = MeanDecreaseGini)) +
+  geom_bar(stat='identity', fill = 'steelblue') +
+  coord_flip() +
+  theme_classic() +
+  labs(
+    x     = "Feature name",
+    y     = "Importance (%)",
+    title = "Feature Importance: Random Forest female")
+    
+#Logistic Regression
+library(caret)
+library(tidymodels)
+library(ROSE)
+
+#Make dataset for prediction
+DISprediction <- DIS %>%
+  select(-1, -4, -6)
+
+DISprediction$Gender <- replace(DISprediction$Gender ,DISprediction$Gender == 2 , 0)
+DISprediction[is.na(DISprediction)] <- 0
+col_names <- c(1:33)
+DISprediction[,col_names] <- lapply(DISprediction[,col_names] , factor)
+
+#check if each variable has 2 levels
+sapply(lapply(DISprediction, unique), length)
+
+#data split
+set.seed(123)
+trainglm <- sample(2, nrow(DISprediction), replace = TRUE, prob = c(.7, .3))
+TrainSetglm <- DISprediction[trainglm==1, ]
+TestSetglm <- DISprediction[trainglm==2, ]
+#do over sampling for the training data
+overglm <- ovun.sample(activeorlapse~., data=TrainSetglm, method = "over")$data
+table(overglm$activeorlapse)
+
+#make a baseline model
+set.seed(123)
+glmbasemodel <- train(activeorlapse ~ childbirth + stopworking + startworking +
+                        familymemberstarttransf + familymemberreceivedtransf +
+                        familypassingaway + 
+                        familymembergotsick + familymemberrecovered,
+                      method = "glm",
+                      data = overglm,
+                      trControl = trainControl(method = "cv", number = 6))
+
+confusionMatrix(predict(glmbasemodel, TestSetglm), TestSetglm$activeorlapse, positive = '1', mode = "everything")
+confusionMatrix(predict(glmbasemodel, TrainSetglm), TrainSetglm$activeorlapse, positive = '1', mode = "everything")
+#add the rest of the variables
+set.seed(123)
+fitglmmodel <- train(activeorlapse ~.,
+              method = "glm", 
+              data = overglm,
+              trControl = trainControl(method = "cv", number = 6))
+summary(fitglmmodel)
+confusionMatrix(predict(fitglmmodel, TestSetglm), TestSetglm$activeorlapse, positive = '1', mode = "everything")
+confusionMatrix(predict(fitglmmodel, TrainSetglm), TrainSetglm$activeorlapse, positive = '1', mode = "everything")
+#variable importance
+importantglm <- varImp(fitglmmodel, conditional=TRUE)
+
+ggplot(importantglm, aes(x = reorder(feature, MeanDecreaseGini), 
+                      y = MeanDecreaseGini)) +
+  geom_bar(stat='identity', fill = 'steelblue') +
+  coord_flip() +
+  theme_classic() +
+  labs(
+    x     = "Feature name",
+    y     = "Importance (%)",
+    title = "Feature Importance: Logistic Regression model")
+
+#Error analyis
+#Male dataset
+DISmale <- DISmale %>%
+  select(-1, -(3:4), -6)
+
+DISmale[is.na(DISmale)] <- 0
+col_names <- c(1:32)
+DISmale[,col_names] <- lapply(DISmale[,col_names] , factor)
+
+#data split
+set.seed(123)
+trainmaleglm <- sample(2, nrow(DISmale), replace = TRUE, prob = c(.7, .3))
+TrainSetmaleglm <- DISmale[trainmaleglm==1, ]
+TestSetmaleglm <- DISmale[trainmaleglm==2, ]
+#do over sampling for the training data
+overmaleglm <- ovun.sample(activeorlapse~., data=TrainSetmaleglm, method = "over")$data
+
+#add the rest of the variables
+set.seed(123)
+fitglmmalemodel <- train(activeorlapse ~.,
+                     method = "glm", 
+                     data = overmaleglm,
+                     trControl = trainControl(method = "cv", number = 6))
+
+summary(fitglmmalemodel)
+
+confusionMatrix(predict(fitglmmalemodel, TestSetmaleglm), TestSetmaleglm$activeorlapse, positive = '1', mode = "everything")
+confusionMatrix(predict(fitglmmalemodel, TrainSetmaleglm), TrainSetmaleglm$activeorlapse, positive = '1', mode = "everything")
+
+importantmaleglm <- varImp(fitglmmalemodel, conditional=TRUE)
+
+ggplot(importantmaleglm, aes(x = reorder(feature, MeanDecreaseGini), 
+                         y = MeanDecreaseGini)) +
+  geom_bar(stat='identity', fill = 'steelblue') +
+  coord_flip() +
+  theme_classic() +
+  labs(
+    x     = "Feature name",
+    y     = "Importance (%)",
+    title = "Feature Importance: Logistic Regression male ")
+
+#Female dataset
+DISfemale <- DISfemale %>%
+  select(-1, -(3:4), -6)
+
+DISfemale[is.na(DISfemale)] <- 0
+col_names <- c(1:32)
+DISfemale[,col_names] <- lapply(DISfemale[,col_names] , factor)
+
+#data split
+set.seed(123)
+trainfemaleglm <- sample(2, nrow(DISfemale), replace = TRUE, prob = c(.7, .3))
+TrainSetfemaleglm <- DISfemale[trainfemaleglm==1, ]
+TestSetfemaleglm <- DISfemale[trainfemaleglm==2, ]
+#do over sampling for the training data
+overfemaleglm <- ovun.sample(activeorlapse~., data=TrainSetfemaleglm, method = "over")$data
+
+#add the rest of the variables
+set.seed(123)
+fitglmfemalemodel <- train(activeorlapse ~.,
+                         method = "glm", 
+                         data = overfemaleglm,
+                         trControl = trainControl(method = "cv", number = 6))
+
+summary(fitglmfemalemodel)
+
+confusionMatrix(predict(fitglmfemalemodel, TestSetfemaleglm), TestSetfemaleglm$activeorlapse, positive = '1', mode = "everything")
+confusionMatrix(predict(fitglmfemalemodel, TrainSetfemaleglm), TrainSetfemaleglm$activeorlapse, positive = '1', mode = "everything")
+
+importantfemaleglm <- varImp(fitglmfemalemodel, conditional=TRUE)
+
+ggplot(importantfemaleglm, aes(x = reorder(feature, MeanDecreaseGini), 
+                             y = MeanDecreaseGini)) +
+  geom_bar(stat='identity', fill = 'steelblue') +
+  coord_flip() +
+  theme_classic() +
+  labs(
+    x     = "Feature name",
+    y     = "Importance (%)",
+    title = "Feature Importance: Logistic Regression female")
