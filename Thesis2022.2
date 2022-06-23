@@ -96,19 +96,7 @@ DIS <- DIS %>%
 DIS <- DIS %>%
   select(-(31:40))
 
-#Whether a person is religious or not
-DIS <- DIS %>%
-  mutate(DIS2_v15 = replace(DIS2_v15,is.na(DIS2_v15),DIS1_22_1))
-DIS <- DIS %>%
-  mutate(DIS2_v15 = replace(DIS2_v15,is.na(DIS2_v15),8))
-DIS <- DIS %>%
-  mutate(DIS1_22_1 = replace(DIS1_22_1,is.na(DIS1_22_1),8))
-DIS$religious <- as.numeric(DIS$DIS1_22_1 != 8 & DIS$DIS2_v15 !=8)
-DIS$diffreligion <- as.numeric(DIS$DIS1_22_1 != DIS$DIS2_v15)
-DIS <- DIS %>%
-  select(-(416:418))
-
-#Difference burgerlijke staat DIS1 and DIS2
+#Difference maritalstatus DIS1 and DIS2
 DIS$differencemaritalstatus <- as.numeric(DIS$DIS2_v06 != DIS$DIS1_v08)
 DIS <- DIS %>%
   select(-(20:22))
@@ -557,10 +545,6 @@ DIS %>%
 #show the plots
 p2
 p1/p3
-
-#religion
-table(DIS$religion)
-prop.table(table(DIS$religious))
 
 #error analysis split the dataset based on gender
 
